@@ -1,0 +1,4 @@
+[submodule "florisboard"]
+	path = florisboard
+	url = https://github.com/florisboard/florisboard.git
+	branch = v0.5.2
