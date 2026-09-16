@@ -1,0 +1,58 @@
+name: release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  pages: write
+  id-token: write
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      FDROID_KEYSTORE_PASSWORD: ${{ secrets.FDROID_KEYSTORE_PASSWORD }}
+    steps:
+      - run: |
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/android-keystore.jks" >> "$GITHUB_ENV"
+          echo "FDROID_KEYSTORE_PATH=$RUNNER_TEMP/fdroid-keystore.jks" >> "$GITHUB_ENV"
+
+          echo "${{ secrets.ANDROID_KEYSTORE }}" | base64 -d > "$RUNNER_TEMP/android-keystore.jks"
+          echo "${{ secrets.FDROID_KEYSTORE }}"  | base64 -d > "$RUNNER_TEMP/fdroid-keystore.jks"
+
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+
+      - uses: jdx/mise-action@v4
+        with:
+          install: true
+      - run: mise setup:android-sdk
+
+      - run: mise diff:apply
+      - run: mise build:release
+
+      - run: pipx install fdroidserver==2.4.5
+      - run: fdroid --version
+      - run: mise fdroid:update
+
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: fdroid
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

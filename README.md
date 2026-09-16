@@ -23,13 +23,11 @@ mise install # to download and install Java/Gradle/other build tools
 mise setup:android-sdk # download and install all build dependencies of Florisboard
 ```
 
-Then dump these 4 variables into `.env`:
+Then dump these 2 variables into `.env`:
 
 ```
 ANDROID_KEYSTORE_PATH=/path/to/generated.jks
 ANDROID_KEYSTORE_PASSWORD=<password that you entered during key generation>
-ANDROID_KEY_ALIAS=release
-ANDROID_KEY_PASSWORD=<password that you entered during key generation>
 ```
 
 Then finally build the app:

@@ -1,8 +1,8 @@
 [task_config]
-shell = "bash -c"
+shell = "bash -euo pipefail -c"
 
 [tools]
-java = "17.0.2"
+java = "temurin-17"
 gradle = "9.2.0"
 android-sdk = "17.0"
 
@@ -10,11 +10,13 @@ android-sdk = "17.0"
 FLORISBOARD_VERSION = "v0.5.2"
 GRADLE_USER_HOME = "{{config_root}}/.cache/gradle"
 ANDROID_USER_HOME = "{{config_root}}/.cache/android"
+ANDROID_KEY_ALIAS = "release"
+FDROID_KEY_ALIAS = "debian"
 _.file = { path = ".env", redacted = true }
 
 [tasks."setup:android-sdk"]
 run = """
-    yes | sdkmanager --licenses >/dev/null
+    (set +o pipefail; yes | sdkmanager --licenses > /dev/null)
     sdkmanager \
         "platform-tools" \
         "platforms;android-33" \
@@ -33,7 +35,7 @@ description = "Installs Android SDK"
 raw = true
 run = """
     pushd florisboard
-        gradle --no-daemon :app:assembleDebug
+        gradle --no-daemon --stacktrace :app:assembleDebug
     popd
 
     ls -l florisboard/app/build/outputs/apk/debug/app-debug.apk
@@ -45,7 +47,7 @@ description = "Builds patched Florisboard (debug build)"
 raw = true
 run = """
     pushd florisboard
-        gradle --no-daemon :app:assembleRelease
+        gradle --no-daemon --stacktrace :app:assembleRelease
     popd
 
     ls -l florisboard/app/build/outputs/apk/release/app-release.apk
@@ -64,9 +66,9 @@ run = "adb logcat -v color 'MPClipboardClient:V' '*:S'"
 [tasks."diff:apply"]
 run = """
     pushd florisboard
-        git reset --hard "$FLORISBOARD_VERSION"
-        git apply ../0001-send-to-receive-from-MPClipboard.patch
-        git add .
+        git fetch origin "refs/tags/$FLORISBOARD_VERSION:refs/tags/$FLORISBOARD_VERSION"
+        git checkout --detach --force "$FLORISBOARD_VERSION"
+        git apply --index ../0001-send-to-receive-from-MPClipboard.patch
     popd
 """
 
@@ -88,5 +90,19 @@ run = """
         git commit --message "send to/receive from MPClipboard" --author="MPClipboard developer <dev@mpclipboard>" --date "Wed, 1 Sep 2026 00:00:00 +0000"
         git format-patch -1 HEAD
         mv 0001-send-to-receive-from-MPClipboard.patch ..
+    popd
+"""
+
+[tasks."fdroid:update"]
+run = """
+    pushd fdroid
+        chmod 600 config.yml
+
+        rm -rf metadata repo srclibs tmp
+        mkdir -p repo
+
+        cp ../florisboard/app/build/outputs/apk/release/app-release.apk repo/florisboard.apk
+
+        fdroid update --verbose --create-metadata
     popd
 """

@@ -1,2 +1,7 @@
 .cache
 .env
+fdroid/keystore.p12
+fdroid/metadata
+fdroid/tmp
+fdroid/repo
+fdroid/srclibs
