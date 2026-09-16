@@ -1,0 +1,92 @@
+[task_config]
+shell = "bash -c"
+
+[tools]
+java = "17.0.2"
+gradle = "9.2.0"
+android-sdk = "17.0"
+
+[env]
+FLORISBOARD_VERSION = "v0.5.2"
+GRADLE_USER_HOME = "{{config_root}}/.cache/gradle"
+ANDROID_USER_HOME = "{{config_root}}/.cache/android"
+_.file = { path = ".env", redacted = true }
+
+[tasks."setup:android-sdk"]
+run = """
+    yes | sdkmanager --licenses >/dev/null
+    sdkmanager \
+        "platform-tools" \
+        "platforms;android-33" \
+        "platforms;android-35" \
+        "platforms;android-36" \
+        "build-tools;30.0.3" \
+        "build-tools;35.0.0" \
+        "ndk;26.1.10909125" \
+        "ndk;27.0.12077973" \
+        "cmake;3.22.1" \
+        "cmake;4.0.2"
+"""
+description = "Installs Android SDK"
+
+[tasks."build:debug"]
+raw = true
+run = """
+    pushd florisboard
+        gradle --no-daemon :app:assembleDebug
+    popd
+
+    ls -l florisboard/app/build/outputs/apk/debug/app-debug.apk
+"""
+description = "Builds patched Florisboard (debug build)"
+
+
+[tasks."build:release"]
+raw = true
+run = """
+    pushd florisboard
+        gradle --no-daemon :app:assembleRelease
+    popd
+
+    ls -l florisboard/app/build/outputs/apk/release/app-release.apk
+"""
+description = "Builds patched Florisboard (release build)"
+
+[tasks."install:debug"]
+run = "adb install -r florisboard/app/build/outputs/apk/debug/app-debug.apk"
+
+[tasks."install:release"]
+run = "adb install -r florisboard/app/build/outputs/apk/release/app-release.apk"
+
+[tasks.logs]
+run = "adb logcat -v color 'MPClipboardClient:V' '*:S'"
+
+[tasks."diff:apply"]
+run = """
+    pushd florisboard
+        git reset --hard "$FLORISBOARD_VERSION"
+        git apply ../0001-send-to-receive-from-MPClipboard.patch
+        git add .
+    popd
+"""
+
+[tasks."diff:clean"]
+run = """
+    pushd florisboard
+        rm -rf app/src/main/aidl/
+        rm -f app/src/main/kotlin/dev/patrickgold/florisboard/ime/clipboard/MPClipboardClient.kt
+        git reset --hard "$FLORISBOARD_VERSION"
+
+        git status
+    popd
+"""
+
+[tasks."diff:dump"]
+run = """
+    pushd florisboard
+        git add .
+        git commit --message "send to/receive from MPClipboard" --author="MPClipboard developer <dev@mpclipboard>" --date "Wed, 1 Sep 2026 00:00:00 +0000"
+        git format-patch -1 HEAD
+        mv 0001-send-to-receive-from-MPClipboard.patch ..
+    popd
+"""

@@ -1,0 +1,394 @@
+From a09e56f5d18a905aefd65ab17ffd76e27ad384d6 Mon Sep 17 00:00:00 2001
+From: MPClipboard developer <dev@mpclipboard>
+Date: Tue, 1 Sep 2026 00:00:00 +0000
+Subject: [PATCH] send to/receive from MPClipboard
+
+---
+ app/build.gradle.kts                          |  26 ++-
+ app/src/main/AndroidManifest.xml              |   3 +
+ .../mpclipboard/IMPClipboardCallback.aidl     |   6 +
+ .../mpclipboard/IMPClipboardService.aidl      |  10 +
+ .../florisboard/FlorisApplication.kt          |   3 +
+ .../ime/clipboard/MPClipboardClient.kt        | 192 ++++++++++++++++++
+ gradle/libs.versions.toml                     |   4 +-
+ 7 files changed, 239 insertions(+), 5 deletions(-)
+ create mode 100644 app/src/main/aidl/dev/ibylich/mpclipboard/IMPClipboardCallback.aidl
+ create mode 100644 app/src/main/aidl/dev/ibylich/mpclipboard/IMPClipboardService.aidl
+ create mode 100644 app/src/main/kotlin/dev/patrickgold/florisboard/ime/clipboard/MPClipboardClient.kt
+
+diff --git a/app/build.gradle.kts b/app/build.gradle.kts
+index 34c4cbd4..4ad811ab 100644
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -38,6 +38,18 @@ val projectVersionNameSuffix = projectVersionName.substringAfter("-", "").let {
+     }
+ }
+ 
++val externalSigningEnvironment = mapOf(
++    "ANDROID_KEYSTORE_PATH" to providers.environmentVariable("ANDROID_KEYSTORE_PATH").orNull,
++    "ANDROID_KEYSTORE_PASSWORD" to providers.environmentVariable("ANDROID_KEYSTORE_PASSWORD").orNull,
++    "ANDROID_KEY_ALIAS" to providers.environmentVariable("ANDROID_KEY_ALIAS").orNull,
++    "ANDROID_KEY_PASSWORD" to providers.environmentVariable("ANDROID_KEY_PASSWORD").orNull,
++)
++val missingExternalSigningValues = externalSigningEnvironment.filterValues { it.isNullOrBlank() }.keys
++
++require(missingExternalSigningValues.isEmpty()) {
++    "External Android signing configuration is required; missing: ${missingExternalSigningValues.joinToString()}"
++}
++
+ kotlin {
+     compilerOptions {
+         jvmTarget.set(JvmTarget.JVM_11)
+@@ -101,12 +113,21 @@ android {
+     }
+ 
+     buildFeatures {
++        aidl = true
+         buildConfig = true
+         compose = true
+     }
+ 
++    val externalSigningConfig = signingConfigs.create("external") {
++        storeFile = file(checkNotNull(externalSigningEnvironment["ANDROID_KEYSTORE_PATH"]))
++        storePassword = checkNotNull(externalSigningEnvironment["ANDROID_KEYSTORE_PASSWORD"])
++        keyAlias = checkNotNull(externalSigningEnvironment["ANDROID_KEY_ALIAS"])
++        keyPassword = checkNotNull(externalSigningEnvironment["ANDROID_KEY_PASSWORD"])
++    }
++
+     buildTypes {
+         named("debug") {
++            signingConfig = externalSigningConfig
+             applicationIdSuffix = ".debug"
+             versionNameSuffix = "-debug+${getGitCommitHash(short = true).get()}"
+ 
+@@ -116,7 +137,7 @@ android {
+             resValue("mipmap", "floris_app_icon", "@mipmap/ic_app_icon_debug")
+             resValue("mipmap", "floris_app_icon_round", "@mipmap/ic_app_icon_debug_round")
+             resValue("drawable", "floris_app_icon_foreground", "@drawable/ic_app_icon_debug_foreground")
+-            resValue("string", "floris_app_name", "FlorisBoard Debug")
++            resValue("string", "floris_app_name", "FlorisBoard Debug + MPClipboard")
+         }
+ 
+         create("beta") {
+@@ -134,6 +155,7 @@ android {
+         }
+ 
+         named("release") {
++            signingConfig = externalSigningConfig
+             versionNameSuffix = projectVersionNameSuffix
+ 
+             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+@@ -143,7 +165,7 @@ android {
+             resValue("mipmap", "floris_app_icon", "@mipmap/ic_app_icon_stable")
+             resValue("mipmap", "floris_app_icon_round", "@mipmap/ic_app_icon_stable_round")
+             resValue("drawable", "floris_app_icon_foreground", "@drawable/ic_app_icon_stable_foreground")
+-            resValue("string", "floris_app_name", "@string/app_name")
++            resValue("string", "floris_app_name", "FlorisBoard + MPClipboard")
+         }
+ 
+         create("benchmark") {
+diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
+index cfeb7b64..226fb8d3 100644
+--- a/app/src/main/AndroidManifest.xml
++++ b/app/src/main/AndroidManifest.xml
+@@ -8,11 +8,14 @@
+     <!-- Permission needed to create notifications on devices running Android 13+ -->
+     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+ 
++    <uses-permission android:name="dev.ibylich.mpclipboard.permission.BIND_SERVICE"/>
++
+     <!-- Android 11+ only: Define that FlorisBoard requests to see all apps that
+           ship with an IME or Spell Check service. This is used to guide the user
+           in the Settings Ui why FlorisBoard may not be working.
+      -->
+     <queries>
++        <package android:name="dev.ibylich.mpclipboard"/>
+         <intent>
+             <action android:name="android.view.InputMethod"/>
+         </intent>
+diff --git a/app/src/main/aidl/dev/ibylich/mpclipboard/IMPClipboardCallback.aidl b/app/src/main/aidl/dev/ibylich/mpclipboard/IMPClipboardCallback.aidl
+new file mode 100644
+index 00000000..f3b49ba1
+--- /dev/null
++++ b/app/src/main/aidl/dev/ibylich/mpclipboard/IMPClipboardCallback.aidl
+@@ -0,0 +1,6 @@
++package dev.ibylich.mpclipboard;
++
++/** Receives clipboard text which arrived from another MPClipboard client. */
++oneway interface IMPClipboardCallback {
++    void onNewRemoteText(String text);
++}
+diff --git a/app/src/main/aidl/dev/ibylich/mpclipboard/IMPClipboardService.aidl b/app/src/main/aidl/dev/ibylich/mpclipboard/IMPClipboardService.aidl
+new file mode 100644
+index 00000000..be030897
+--- /dev/null
++++ b/app/src/main/aidl/dev/ibylich/mpclipboard/IMPClipboardService.aidl
+@@ -0,0 +1,10 @@
++package dev.ibylich.mpclipboard;
++
++import dev.ibylich.mpclipboard.IMPClipboardCallback;
++
++/** Contract implemented by dev.ibylich.mpclipboard.MPClipboardService. */
++oneway interface IMPClipboardService {
++    void onNewLocalText(String text);
++    void registerRemoteTextCallback(IMPClipboardCallback callback);
++    void unregisterRemoteTextCallback(IMPClipboardCallback callback);
++}
+diff --git a/app/src/main/kotlin/dev/patrickgold/florisboard/FlorisApplication.kt b/app/src/main/kotlin/dev/patrickgold/florisboard/FlorisApplication.kt
+index 31a5cc4f..cf407885 100644
+--- a/app/src/main/kotlin/dev/patrickgold/florisboard/FlorisApplication.kt
++++ b/app/src/main/kotlin/dev/patrickgold/florisboard/FlorisApplication.kt
+@@ -28,6 +28,7 @@ import androidx.core.os.UserManagerCompat
+ import dev.patrickgold.florisboard.app.FlorisPreferenceModel
+ import dev.patrickgold.florisboard.app.FlorisPreferenceStore
+ import dev.patrickgold.florisboard.ime.clipboard.ClipboardManager
++import dev.patrickgold.florisboard.ime.clipboard.MPClipboardClient
+ import dev.patrickgold.florisboard.ime.core.SubtypeManager
+ import dev.patrickgold.florisboard.ime.dictionary.DictionaryManager
+ import dev.patrickgold.florisboard.ime.editor.EditorInstance
+@@ -75,6 +76,7 @@ class FlorisApplication : Application() {
+ 
+     val cacheManager = lazy { CacheManager(this) }
+     val clipboardManager = lazy { ClipboardManager(this) }
++    private val mpClipboardClient = lazy { MPClipboardClient(this) }
+     val editorInstance = lazy { EditorInstance(this) }
+     val extensionManager = lazy { ExtensionManager(this) }
+     val glideTypingManager = lazy { GlideTypingManager(this) }
+@@ -124,6 +126,7 @@ class FlorisApplication : Application() {
+         }
+         extensionManager.value.init()
+         clipboardManager.value.initializeForContext(this)
++        mpClipboardClient.value.start()
+         DictionaryManager.init(this)
+     }
+ 
+diff --git a/app/src/main/kotlin/dev/patrickgold/florisboard/ime/clipboard/MPClipboardClient.kt b/app/src/main/kotlin/dev/patrickgold/florisboard/ime/clipboard/MPClipboardClient.kt
+new file mode 100644
+index 00000000..69058c1e
+--- /dev/null
++++ b/app/src/main/kotlin/dev/patrickgold/florisboard/ime/clipboard/MPClipboardClient.kt
+@@ -0,0 +1,192 @@
++package dev.patrickgold.florisboard.ime.clipboard
++
++import android.content.ClipData
++import android.content.ClipboardManager
++import android.content.ComponentName
++import android.content.Context
++import android.content.Intent
++import android.content.ServiceConnection
++import android.os.Handler
++import android.os.IBinder
++import android.os.Looper
++import android.os.PersistableBundle
++import android.os.RemoteException
++import android.util.Log
++import dev.ibylich.mpclipboard.IMPClipboardCallback
++import dev.ibylich.mpclipboard.IMPClipboardService
++
++/**
++ * Connects FlorisBoard's system clipboard to the separate MPClipboard application.
++ *
++ * A missing or dead service binding is retried every five seconds. Android may reconnect an
++ * existing binding first; a successful connection cancels the pending retry.
++ */
++class MPClipboardClient(context: Context) {
++    companion object {
++        private const val TAG = "MPClipboardClient"
++        private const val SERVICE_PACKAGE = "dev.ibylich.mpclipboard"
++        private const val SERVICE_CLASS = "dev.ibylich.mpclipboard.MPClipboardService"
++        private const val REMOTE_CLIP_MARKER = "dev.ibylich.mpclipboard.REMOTE_CLIP"
++        private const val REMOTE_CLIP_LABEL = "MPClipboard"
++        private const val REBIND_DELAY_MS = 5_000L
++    }
++
++    private val appContext = context.applicationContext
++    private val clipboardManager =
++        appContext.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
++    private val mainHandler = Handler(Looper.getMainLooper())
++
++    @Volatile
++    private var service: IMPClipboardService? = null
++    private var startAttempted = false
++    private var bindingRegistered = false
++    private var lastProcessedClipTimestamp: Long? = null
++
++    private val rebindRunnable = Runnable {
++        if (service == null) {
++            unbindIfNeeded()
++            bind()
++        }
++    }
++
++    private val remoteTextCallback = object : IMPClipboardCallback.Stub() {
++        override fun onNewRemoteText(text: String?) {
++            if (text.isNullOrEmpty()) {
++                Log.w(TAG, "Ignoring empty remote clipboard text")
++                return
++            }
++            mainHandler.post { setRemoteClipboardText(text) }
++        }
++    }
++
++    private val clipboardListener = ClipboardManager.OnPrimaryClipChangedListener {
++        sendCurrentClipboardText()
++    }
++
++    private val serviceConnection = object : ServiceConnection {
++        override fun onServiceConnected(name: ComponentName, binder: IBinder) {
++            val connectedService = IMPClipboardService.Stub.asInterface(binder)
++            service = connectedService
++            try {
++                connectedService.registerRemoteTextCallback(remoteTextCallback)
++                mainHandler.removeCallbacks(rebindRunnable)
++            } catch (e: RemoteException) {
++                service = null
++                Log.e(TAG, "Failed to register the remote clipboard callback", e)
++                scheduleRebind()
++            } catch (e: RuntimeException) {
++                service = null
++                Log.e(TAG, "MPClipboard exposed an incompatible service", e)
++                scheduleRebind()
++            }
++        }
++
++        override fun onServiceDisconnected(name: ComponentName) {
++            service = null
++            Log.e(TAG, "MPClipboard service disconnected")
++            scheduleRebind()
++        }
++
++        override fun onBindingDied(name: ComponentName) {
++            service = null
++            Log.e(TAG, "MPClipboard binding died")
++            scheduleRebind()
++        }
++
++        override fun onNullBinding(name: ComponentName) {
++            service = null
++            Log.e(TAG, "MPClipboard service returned no binder")
++            scheduleRebind()
++        }
++    }
++
++    fun start() {
++        if (startAttempted) return
++        startAttempted = true
++
++        clipboardManager.addPrimaryClipChangedListener(clipboardListener)
++        bind()
++    }
++
++    private fun bind() {
++        val intent = Intent().setComponent(ComponentName(SERVICE_PACKAGE, SERVICE_CLASS))
++        try {
++            bindingRegistered = appContext.bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
++            if (!bindingRegistered) {
++                Log.e(TAG, "Could not bind to $SERVICE_CLASS")
++            }
++        } catch (e: Exception) {
++            bindingRegistered = false
++            Log.e(TAG, "Could not bind to $SERVICE_CLASS", e)
++        }
++        if (service == null) {
++            scheduleRebind()
++        }
++    }
++
++    private fun scheduleRebind() {
++        mainHandler.removeCallbacks(rebindRunnable)
++        mainHandler.postDelayed(rebindRunnable, REBIND_DELAY_MS)
++    }
++
++    private fun unbindIfNeeded() {
++        if (!bindingRegistered) return
++        try {
++            appContext.unbindService(serviceConnection)
++        } catch (e: IllegalArgumentException) {
++            Log.e(TAG, "Could not release the previous MPClipboard binding", e)
++        } finally {
++            bindingRegistered = false
++            service = null
++        }
++    }
++
++    private fun sendCurrentClipboardText() {
++        val clip = try {
++            clipboardManager.primaryClip
++        } catch (e: Exception) {
++            Log.e(TAG, "Could not read the system clipboard", e)
++            return
++        } ?: return
++
++        val clipTimestamp = clip.description.timestamp
++        if (clipTimestamp == lastProcessedClipTimestamp) return
++        lastProcessedClipTimestamp = clipTimestamp
++
++        if (clip.description.extras?.getBoolean(REMOTE_CLIP_MARKER, false) == true) return
++        if (clip.itemCount == 0) return
++
++        val text = clip.getItemAt(0).coerceToText(appContext)?.toString()
++            ?.takeIf { it.isNotEmpty() } ?: return
++        val connectedService = service
++        if (connectedService == null) {
++            Log.e(TAG, "Dropping copied text because MPClipboard is not connected")
++            return
++        }
++
++        try {
++            connectedService.onNewLocalText(text)
++        } catch (e: RemoteException) {
++            service = null
++            Log.e(TAG, "Could not send copied text to MPClipboard", e)
++            scheduleRebind()
++        } catch (e: RuntimeException) {
++            service = null
++            Log.e(TAG, "MPClipboard rejected copied text", e)
++            scheduleRebind()
++        }
++    }
++
++    private fun setRemoteClipboardText(text: String) {
++        val clip = ClipData.newPlainText(REMOTE_CLIP_LABEL, text).also {
++            it.description.extras = PersistableBundle().apply {
++                putBoolean(REMOTE_CLIP_MARKER, true)
++            }
++        }
++        try {
++            clipboardManager.setPrimaryClip(clip)
++        } catch (e: Exception) {
++            Log.e(TAG, "Could not put remote text into the system clipboard", e)
++        }
++    }
++}
+diff --git a/gradle/libs.versions.toml b/gradle/libs.versions.toml
+index 71225aea..e1cd206b 100644
+--- a/gradle/libs.versions.toml
++++ b/gradle/libs.versions.toml
+@@ -21,7 +21,7 @@ ksp = "2.2.20-2.0.3"
+ material-kolor = "4.0.5"
+ mikepenz-aboutlibraries = "13.1.0"
+ patrickgold-compose-tooltip = "0.2.0-rc02"
+-patrickgold-jetpref = "20251119T222500Z-SNAPSHOT"
++patrickgold-jetpref = "0.3.0"
+ 
+ # Testing
+ androidx-benchmark = "1.3.4"
+@@ -32,7 +32,6 @@ junit-jupiter-params = "5.13.3"
+ kotlinx-kover = "0.9.1"
+ 
+ 
+-
+ [libraries]
+ # Main
+ androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity" }
+@@ -79,7 +78,6 @@ junit-jupiter-params = { module = "org.junit.jupiter:junit-jupiter-params", vers
+ kotlin-test-junit5 = { module = "org.jetbrains.kotlin:kotlin-test-junit5", version.ref = "kotlin" }
+ 
+ 
+-
+ [plugins]
+ # Main
+ agp-application = { id = "com.android.application", version.ref = "android-gradle-plugin" }
+-- 
+2.55.0
+
