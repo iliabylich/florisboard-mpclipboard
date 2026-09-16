@@ -4,7 +4,7 @@ This directory contains a patch for building [FlorisBoard](https://github.com/fl
 
 ## Installation from pre-build F-Droid source
 
-TODO
+Can be installed from [GitHub Pages](https://iliabylich.github.io/florisboard-mpclipboard/repo/), requires F-Droid client.
 
 ## Build Process
 
