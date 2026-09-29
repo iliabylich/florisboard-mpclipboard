@@ -1,44 +1,26 @@
-From e93798c6dc13bc79df13c9152b069cbd3495ea1e Mon Sep 17 00:00:00 2001
+From eb7da57b2355d3415ae02a7aee17f246d6c2dfaa Mon Sep 17 00:00:00 2001
 From: MPClipboard developer <dev@mpclipboard>
 Date: Tue, 1 Sep 2026 00:00:00 +0000
 Subject: [PATCH] send to/receive from MPClipboard
 
 ---
- app/build.gradle.kts                          |  27 ++-
+ app/build.gradle.kts                          |   7 +-
  app/src/main/AndroidManifest.xml              |   3 +
  .../mpclipboard/IMPClipboardCallback.aidl     |   6 +
  .../mpclipboard/IMPClipboardService.aidl      |  10 +
  .../florisboard/FlorisApplication.kt          |   3 +
  .../ime/clipboard/MPClipboardClient.kt        | 192 ++++++++++++++++++
  gradle/libs.versions.toml                     |   4 +-
- 7 files changed, 239 insertions(+), 6 deletions(-)
+ 7 files changed, 219 insertions(+), 6 deletions(-)
  create mode 100644 app/src/main/aidl/dev/ibylich/mpclipboard/IMPClipboardCallback.aidl
  create mode 100644 app/src/main/aidl/dev/ibylich/mpclipboard/IMPClipboardService.aidl
  create mode 100644 app/src/main/kotlin/dev/patrickgold/florisboard/ime/clipboard/MPClipboardClient.kt
 
 diff --git a/app/build.gradle.kts b/app/build.gradle.kts
-index 34c4cbd4..ed23b57f 100644
+index 34c4cbd4..37959f5d 100644
 --- a/app/build.gradle.kts
 +++ b/app/build.gradle.kts
-@@ -38,6 +38,17 @@ val projectVersionNameSuffix = projectVersionName.substringAfter("-", "").let {
-     }
- }
- 
-+val externalSigningEnvironment = mapOf(
-+    "ANDROID_KEYSTORE_PATH" to providers.environmentVariable("ANDROID_KEYSTORE_PATH").orNull,
-+    "ANDROID_KEYSTORE_PASSWORD" to providers.environmentVariable("ANDROID_KEYSTORE_PASSWORD").orNull,
-+    "ANDROID_KEY_ALIAS" to providers.environmentVariable("ANDROID_KEY_ALIAS").orNull,
-+)
-+val missingExternalSigningValues = externalSigningEnvironment.filterValues { it.isNullOrBlank() }.keys
-+
-+require(missingExternalSigningValues.isEmpty()) {
-+    "External Android signing configuration is required; missing: ${missingExternalSigningValues.joinToString()}"
-+}
-+
- kotlin {
-     compilerOptions {
-         jvmTarget.set(JvmTarget.JVM_11)
-@@ -67,7 +78,7 @@ android {
+@@ -67,7 +67,7 @@ android {
      }
  
      defaultConfig {
@@ -47,7 +29,7 @@ index 34c4cbd4..ed23b57f 100644
          minSdk = projectMinSdk.toInt()
          targetSdk = projectTargetSdk.toInt()
          versionCode = projectVersionCode.toInt()
-@@ -101,12 +112,21 @@ android {
+@@ -101,6 +101,7 @@ android {
      }
  
      buildFeatures {
@@ -55,21 +37,7 @@ index 34c4cbd4..ed23b57f 100644
          buildConfig = true
          compose = true
      }
- 
-+    val externalSigningConfig = signingConfigs.create("external") {
-+        storeFile = file(checkNotNull(externalSigningEnvironment["ANDROID_KEYSTORE_PATH"]))
-+        storePassword = checkNotNull(externalSigningEnvironment["ANDROID_KEYSTORE_PASSWORD"])
-+        keyAlias = checkNotNull(externalSigningEnvironment["ANDROID_KEY_ALIAS"])
-+        keyPassword = checkNotNull(externalSigningEnvironment["ANDROID_KEYSTORE_PASSWORD"])
-+    }
-+
-     buildTypes {
-         named("debug") {
-+            signingConfig = externalSigningConfig
-             applicationIdSuffix = ".debug"
-             versionNameSuffix = "-debug+${getGitCommitHash(short = true).get()}"
- 
-@@ -116,7 +136,7 @@ android {
+@@ -116,7 +117,7 @@ android {
              resValue("mipmap", "floris_app_icon", "@mipmap/ic_app_icon_debug")
              resValue("mipmap", "floris_app_icon_round", "@mipmap/ic_app_icon_debug_round")
              resValue("drawable", "floris_app_icon_foreground", "@drawable/ic_app_icon_debug_foreground")
@@ -78,15 +46,7 @@ index 34c4cbd4..ed23b57f 100644
          }
  
          create("beta") {
-@@ -134,6 +154,7 @@ android {
-         }
- 
-         named("release") {
-+            signingConfig = externalSigningConfig
-             versionNameSuffix = projectVersionNameSuffix
- 
-             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-@@ -143,7 +164,7 @@ android {
+@@ -143,7 +144,7 @@ android {
              resValue("mipmap", "floris_app_icon", "@mipmap/ic_app_icon_stable")
              resValue("mipmap", "floris_app_icon_round", "@mipmap/ic_app_icon_stable_round")
              resValue("drawable", "floris_app_icon_foreground", "@drawable/ic_app_icon_stable_foreground")
