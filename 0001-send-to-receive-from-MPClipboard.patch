@@ -1,4 +1,4 @@
-From eb7da57b2355d3415ae02a7aee17f246d6c2dfaa Mon Sep 17 00:00:00 2001
+From 6483a9ed2ed29ec3ac063689443c588af8c9ba38 Mon Sep 17 00:00:00 2001
 From: MPClipboard developer <dev@mpclipboard>
 Date: Tue, 1 Sep 2026 00:00:00 +0000
 Subject: [PATCH] send to/receive from MPClipboard
@@ -10,8 +10,8 @@ Subject: [PATCH] send to/receive from MPClipboard
  .../mpclipboard/IMPClipboardService.aidl      |  10 +
  .../florisboard/FlorisApplication.kt          |   3 +
  .../ime/clipboard/MPClipboardClient.kt        | 192 ++++++++++++++++++
- gradle/libs.versions.toml                     |   4 +-
- 7 files changed, 219 insertions(+), 6 deletions(-)
+ gradle/libs.versions.toml                     |   2 +-
+ 7 files changed, 219 insertions(+), 4 deletions(-)
  create mode 100644 app/src/main/aidl/dev/ibylich/mpclipboard/IMPClipboardCallback.aidl
  create mode 100644 app/src/main/aidl/dev/ibylich/mpclipboard/IMPClipboardService.aidl
  create mode 100644 app/src/main/kotlin/dev/patrickgold/florisboard/ime/clipboard/MPClipboardClient.kt
@@ -329,7 +329,7 @@ index 00000000..69058c1e
 +    }
 +}
 diff --git a/gradle/libs.versions.toml b/gradle/libs.versions.toml
-index 71225aea..e1cd206b 100644
+index 71225aea..226b6e24 100644
 --- a/gradle/libs.versions.toml
 +++ b/gradle/libs.versions.toml
 @@ -21,7 +21,7 @@ ksp = "2.2.20-2.0.3"
@@ -341,22 +341,6 @@ index 71225aea..e1cd206b 100644
  
  # Testing
  androidx-benchmark = "1.3.4"
-@@ -32,7 +32,6 @@ junit-jupiter-params = "5.13.3"
- kotlinx-kover = "0.9.1"
- 
- 
--
- [libraries]
- # Main
- androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity" }
-@@ -79,7 +78,6 @@ junit-jupiter-params = { module = "org.junit.jupiter:junit-jupiter-params", vers
- kotlin-test-junit5 = { module = "org.jetbrains.kotlin:kotlin-test-junit5", version.ref = "kotlin" }
- 
- 
--
- [plugins]
- # Main
- agp-application = { id = "com.android.application", version.ref = "android-gradle-plugin" }
 -- 
 2.55.0
 
