@@ -84,7 +84,7 @@ run = """
 run = """
     pushd florisboard
         rm -rf app/src/main/aidl/
-        rm -f app/src/main/kotlin/dev/patrickgold/florisboard/ime/clipboard/MPClipboardClient.kt
+        rm -f app/src/main/kotlin/dev/patrickgold/florisboard/MPClipboardClient.kt
         git reset --hard "$FLORISBOARD_VERSION"
 
         git status

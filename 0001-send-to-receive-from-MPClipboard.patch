@@ -1,4 +1,4 @@
-From 6483a9ed2ed29ec3ac063689443c588af8c9ba38 Mon Sep 17 00:00:00 2001
+From a886e07f3ceb756cbc5847806a20d94db3406747 Mon Sep 17 00:00:00 2001
 From: MPClipboard developer <dev@mpclipboard>
 Date: Tue, 1 Sep 2026 00:00:00 +0000
 Subject: [PATCH] send to/receive from MPClipboard
@@ -8,13 +8,13 @@ Subject: [PATCH] send to/receive from MPClipboard
  app/src/main/AndroidManifest.xml              |   3 +
  .../mpclipboard/IMPClipboardCallback.aidl     |   6 +
  .../mpclipboard/IMPClipboardService.aidl      |  10 +
- .../florisboard/FlorisApplication.kt          |   3 +
- .../ime/clipboard/MPClipboardClient.kt        | 192 ++++++++++++++++++
+ .../florisboard/FlorisApplication.kt          |   1 +
+ .../florisboard/MPClipboardClient.kt          | 192 ++++++++++++++++++
  gradle/libs.versions.toml                     |   2 +-
- 7 files changed, 219 insertions(+), 4 deletions(-)
+ 7 files changed, 217 insertions(+), 4 deletions(-)
  create mode 100644 app/src/main/aidl/dev/ibylich/mpclipboard/IMPClipboardCallback.aidl
  create mode 100644 app/src/main/aidl/dev/ibylich/mpclipboard/IMPClipboardService.aidl
- create mode 100644 app/src/main/kotlin/dev/patrickgold/florisboard/ime/clipboard/MPClipboardClient.kt
+ create mode 100644 app/src/main/kotlin/dev/patrickgold/florisboard/MPClipboardClient.kt
 
 diff --git a/app/build.gradle.kts b/app/build.gradle.kts
 index 34c4cbd4..37959f5d 100644
@@ -103,40 +103,24 @@ index 00000000..be030897
 +    void unregisterRemoteTextCallback(IMPClipboardCallback callback);
 +}
 diff --git a/app/src/main/kotlin/dev/patrickgold/florisboard/FlorisApplication.kt b/app/src/main/kotlin/dev/patrickgold/florisboard/FlorisApplication.kt
-index 31a5cc4f..cf407885 100644
+index 31a5cc4f..51c4fd43 100644
 --- a/app/src/main/kotlin/dev/patrickgold/florisboard/FlorisApplication.kt
 +++ b/app/src/main/kotlin/dev/patrickgold/florisboard/FlorisApplication.kt
-@@ -28,6 +28,7 @@ import androidx.core.os.UserManagerCompat
- import dev.patrickgold.florisboard.app.FlorisPreferenceModel
- import dev.patrickgold.florisboard.app.FlorisPreferenceStore
- import dev.patrickgold.florisboard.ime.clipboard.ClipboardManager
-+import dev.patrickgold.florisboard.ime.clipboard.MPClipboardClient
- import dev.patrickgold.florisboard.ime.core.SubtypeManager
- import dev.patrickgold.florisboard.ime.dictionary.DictionaryManager
- import dev.patrickgold.florisboard.ime.editor.EditorInstance
-@@ -75,6 +76,7 @@ class FlorisApplication : Application() {
- 
-     val cacheManager = lazy { CacheManager(this) }
-     val clipboardManager = lazy { ClipboardManager(this) }
-+    private val mpClipboardClient = lazy { MPClipboardClient(this) }
-     val editorInstance = lazy { EditorInstance(this) }
-     val extensionManager = lazy { ExtensionManager(this) }
-     val glideTypingManager = lazy { GlideTypingManager(this) }
-@@ -124,6 +126,7 @@ class FlorisApplication : Application() {
+@@ -124,6 +124,7 @@ class FlorisApplication : Application() {
          }
          extensionManager.value.init()
          clipboardManager.value.initializeForContext(this)
-+        mpClipboardClient.value.start()
++        MPClipboardClient(this).start()
          DictionaryManager.init(this)
      }
  
-diff --git a/app/src/main/kotlin/dev/patrickgold/florisboard/ime/clipboard/MPClipboardClient.kt b/app/src/main/kotlin/dev/patrickgold/florisboard/ime/clipboard/MPClipboardClient.kt
+diff --git a/app/src/main/kotlin/dev/patrickgold/florisboard/MPClipboardClient.kt b/app/src/main/kotlin/dev/patrickgold/florisboard/MPClipboardClient.kt
 new file mode 100644
-index 00000000..69058c1e
+index 00000000..b3f25a29
 --- /dev/null
-+++ b/app/src/main/kotlin/dev/patrickgold/florisboard/ime/clipboard/MPClipboardClient.kt
++++ b/app/src/main/kotlin/dev/patrickgold/florisboard/MPClipboardClient.kt
 @@ -0,0 +1,192 @@
-+package dev.patrickgold.florisboard.ime.clipboard
++package dev.patrickgold.florisboard
 +
 +import android.content.ClipData
 +import android.content.ClipboardManager
