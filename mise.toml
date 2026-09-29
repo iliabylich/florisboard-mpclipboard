@@ -41,7 +41,11 @@ run = """
     : "$ANDROID_KEYSTORE_PATH" "$ANDROID_KEYSTORE_PASSWORD" "$ANDROID_KEY_ALIAS"
 
     pushd florisboard
-        gradle --no-daemon --stacktrace :app:assembleDebug
+        gradle --no-daemon --stacktrace :app:assembleDebug \
+            -Pandroid.injected.signing.store.file="$ANDROID_KEYSTORE_PATH" \
+            -Pandroid.injected.signing.store.password="$ANDROID_KEYSTORE_PASSWORD" \
+            -Pandroid.injected.signing.key.alias="$ANDROID_KEY_ALIAS" \
+            -Pandroid.injected.signing.key.password="$ANDROID_KEYSTORE_PASSWORD"
     popd
 
     ls -l florisboard/app/build/outputs/apk/debug/app-debug.apk
@@ -65,6 +69,10 @@ run = """
         : "${upstream_code:?}" "${upstream_name:?}"
 
         gradle --no-daemon --stacktrace :app:assembleRelease \
+            -Pandroid.injected.signing.store.file="$ANDROID_KEYSTORE_PATH" \
+            -Pandroid.injected.signing.store.password="$ANDROID_KEYSTORE_PASSWORD" \
+            -Pandroid.injected.signing.key.alias="$ANDROID_KEY_ALIAS" \
+            -Pandroid.injected.signing.key.password="$ANDROID_KEYSTORE_PASSWORD" \
             -PprojectVersionCode="$((upstream_code * 1000 + BUILD_NUMBER))" \
             -PprojectVersionName="$upstream_name-$BUILD_NUMBER"
     popd
