@@ -34,13 +34,16 @@ Then finally build the app:
 
 ```sh
 mise diff:apply
-mise build:release
+BUILD_NUMBER=42 mise build:release
 ```
+
+`BUILD_NUMBER` is appended to the upstream version: with FlorisBoard 0.5.2 (version code 117):
+
+1. app version becomes `0.5.2-42` and
+2. version code is `117042`
 
 It takes quite a lot of time to build it, but once it's done the APK file will be available at:
 
 ```
 ./florisboard/app/build/outputs/apk/release/app-release.apk
 ```
-
-Debug builds are preferred if you are trying to change/debug something, replace the word "release" in all mise commands above with "debug", the app still must be signed, so ENV variables are still required.

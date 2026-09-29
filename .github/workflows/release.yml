@@ -2,6 +2,11 @@ name: release
 
 on:
   workflow_dispatch:
+    inputs:
+      build_number:
+        description: "Build number (0-999), appended to the upstream version"
+        required: true
+        type: string
 
 permissions:
   pages: write
@@ -36,6 +41,8 @@ jobs:
 
       - run: mise diff:apply
       - run: mise build:release
+        env:
+          BUILD_NUMBER: ${{ inputs.build_number }}
 
       - run: pipx install fdroidserver==2.4.5
       - run: fdroid --version

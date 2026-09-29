@@ -54,8 +54,19 @@ raw = true
 run = """
     : "$ANDROID_KEYSTORE_PATH" "$ANDROID_KEYSTORE_PASSWORD" "$ANDROID_KEY_ALIAS"
 
+    if [[ ! "${BUILD_NUMBER:-}" =~ ^(0|[1-9][0-9]{0,2})$ ]]; then
+        echo "BUILD_NUMBER must be an integer from 0 to 999, got '${BUILD_NUMBER:-}'" >&2
+        exit 1
+    fi
+
     pushd florisboard
-        gradle --no-daemon --stacktrace :app:assembleRelease
+        upstream_code="$(sed -n 's/^projectVersionCode=//p' gradle.properties)"
+        upstream_name="$(sed -n 's/^projectVersionName=//p' gradle.properties)"
+        : "${upstream_code:?}" "${upstream_name:?}"
+
+        gradle --no-daemon --stacktrace :app:assembleRelease \
+            -PprojectVersionCode="$((upstream_code * 1000 + BUILD_NUMBER))" \
+            -PprojectVersionName="$upstream_name-$BUILD_NUMBER"
     popd
 
     ls -l florisboard/app/build/outputs/apk/release/app-release.apk
