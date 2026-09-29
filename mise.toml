@@ -83,7 +83,7 @@ run = """
 [tasks."diff:clean"]
 run = """
     pushd florisboard
-        rm -rf app/src/main/aidl/
+        rm -rf app/src/main/aidl
         rm -f app/src/main/kotlin/dev/patrickgold/florisboard/MPClipboardClient.kt
         git reset --hard "$FLORISBOARD_VERSION"
 
